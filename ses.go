@@ -18,7 +18,20 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"golang.org/x/net/context"
 )
+
+
+// HTTPClient is the context key to use with golang.org/x/net/context's
+// WithValue function to associate an *http.Client value with a context.
+var HTTPClient contextKey
+
+// contextKey is just an empty struct. It exists so HTTPClient can be
+// an immutable public variable with a unique type. It's immutable
+// because nobody else can create a ContextKey, being unexported.
+type contextKey struct{}
+
 
 // Config specifies configuration options and credentials for accessing Amazon SES.
 type Config struct {
@@ -42,7 +55,7 @@ var EnvConfig = Config{
 
 // SendEmail sends a plain text email. Note that from must be a verified
 // address in the AWS control panel.
-func (c *Config) SendEmail(from, to, subject, body string) (string, error) {
+func (c *Config) SendEmail(cx context.Context, from, to, subject, body string) (string, error) {
 	data := make(url.Values)
 	data.Add("Action", "SendEmail")
 	data.Add("Source", from)
@@ -51,12 +64,12 @@ func (c *Config) SendEmail(from, to, subject, body string) (string, error) {
 	data.Add("Message.Body.Text.Data", body)
 	data.Add("AWSAccessKeyId", c.AccessKeyID)
 
-	return sesPost(data, c.Endpoint, c.AccessKeyID, c.SecretAccessKey)
+	return sesPost(cx, data, c.Endpoint, c.AccessKeyID, c.SecretAccessKey)
 }
 
 // SendEmailHTML sends a HTML email. Note that from must be a verified address
 // in the AWS control panel.
-func (c *Config) SendEmailHTML(from, to, subject, bodyText, bodyHTML string) (string, error) {
+func (c *Config) SendEmailHTML(cx context.Context, from, to, subject, bodyText, bodyHTML string) (string, error) {
 	data := make(url.Values)
 	data.Add("Action", "SendEmail")
 	data.Add("Source", from)
@@ -66,18 +79,18 @@ func (c *Config) SendEmailHTML(from, to, subject, bodyText, bodyHTML string) (st
 	data.Add("Message.Body.Html.Data", bodyHTML)
 	data.Add("AWSAccessKeyId", c.AccessKeyID)
 
-	return sesPost(data, c.Endpoint, c.AccessKeyID, c.SecretAccessKey)
+	return sesPost(cx, data, c.Endpoint, c.AccessKeyID, c.SecretAccessKey)
 }
 
 // SendRawEmail sends a raw email. Note that from must be a verified address
 // in the AWS control panel.
-func (c *Config) SendRawEmail(raw []byte) (string, error) {
+func (c *Config) SendRawEmail(cx context.Context, raw []byte) (string, error) {
 	data := make(url.Values)
 	data.Add("Action", "SendRawEmail")
 	data.Add("RawMessage.Data", base64.StdEncoding.EncodeToString(raw))
 	data.Add("AWSAccessKeyId", c.AccessKeyID)
 
-	return sesPost(data, c.Endpoint, c.AccessKeyID, c.SecretAccessKey)
+	return sesPost(cx, data, c.Endpoint, c.AccessKeyID, c.SecretAccessKey)
 }
 
 func authorizationHeader(date, accessKeyID, secretAccessKey string) []string {
@@ -88,7 +101,7 @@ func authorizationHeader(date, accessKeyID, secretAccessKey string) []string {
 	return []string{auth}
 }
 
-func sesGet(data url.Values, endpoint, accessKeyID, secretAccessKey string) (string, error) {
+func sesGet(cx context.Context, data url.Values, endpoint, accessKeyID, secretAccessKey string) (string, error) {
 	urlstr := fmt.Sprintf("%s?%s", endpoint, data.Encode())
 	endpointURL, _ := url.Parse(urlstr)
 	headers := map[string][]string{}
@@ -112,8 +125,11 @@ func sesGet(data url.Values, endpoint, accessKeyID, secretAccessKey string) (str
 		Close:      true,
 		Header:     headers,
 	}
-
-	r, err := http.DefaultClient.Do(&req)
+	var hc *http.Client
+	if hc, _ = cx.Value(HTTPClient).(*http.Client); hc == nil {
+			hc = http.DefaultClient
+	}
+	r, err := hc.Do(&req)
 	if err != nil {
 		log.Printf("http error: %s", err)
 		return "", err
@@ -132,7 +148,7 @@ func sesGet(data url.Values, endpoint, accessKeyID, secretAccessKey string) (str
 	return string(resultbody), nil
 }
 
-func sesPost(data url.Values, endpoint, accessKeyID, secretAccessKey string) (string, error) {
+func sesPost(cx context.Context, data url.Values, endpoint, accessKeyID, secretAccessKey string) (string, error) {
 	body := strings.NewReader(data.Encode())
 	req, err := http.NewRequest("POST", endpoint, body)
 	if err != nil {
@@ -151,7 +167,11 @@ func sesPost(data url.Values, endpoint, accessKeyID, secretAccessKey string) (st
 	auth := fmt.Sprintf("AWS3-HTTPS AWSAccessKeyId=%s, Algorithm=HmacSHA256, Signature=%s", accessKeyID, signature)
 	req.Header.Set("X-Amzn-Authorization", auth)
 
-	r, err := http.DefaultClient.Do(req)
+	var hc *http.Client
+	if hc, _ = cx.Value(HTTPClient).(*http.Client); hc == nil {
+			hc = http.DefaultClient
+	}
+	r, err := hc.Do(req)
 	if err != nil {
 		log.Printf("http error: %s", err)
 		return "", err

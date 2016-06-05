@@ -10,6 +10,8 @@ import (
 	"flag"
 	"fmt"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 var to, from string
@@ -27,7 +29,7 @@ func checkFlags(t *testing.T) {
 
 func TestSendEmail(t *testing.T) {
 	checkFlags(t)
-	_, err := EnvConfig.SendEmail(from, to, "amzses text test", textBody)
+	_, err := EnvConfig.SendEmail(context.TODO(), from, to, "amzses text test", textBody)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +37,7 @@ func TestSendEmail(t *testing.T) {
 
 func TestSendEmailHTML(t *testing.T) {
 	checkFlags(t)
-	_, err := EnvConfig.SendEmailHTML(from, to, "amzses html test", textBody, htmlBody)
+	_, err := EnvConfig.SendEmailHTML(context.TODO(), from, to, "amzses html test", textBody, htmlBody)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +68,7 @@ Content-Transfer-Encoding: base64
 --_003_97DCB304C5294779BEBCFC8357FCC4D2
 `
 
-	_, err := EnvConfig.SendRawEmail([]byte(fmt.Sprintf(raw, to, from, textBody, len(attachment), attachment)))
+	_, err := EnvConfig.SendRawEmail(context.TODO(), []byte(fmt.Sprintf(raw, to, from, textBody, len(attachment), attachment)))
 	if err != nil {
 		t.Fatal(err)
 	}
