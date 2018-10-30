@@ -22,7 +22,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-
 // HTTPClient is the context key to use with golang.org/x/net/context's
 // WithValue function to associate an *http.Client value with a context.
 var HTTPClient contextKey
@@ -31,7 +30,6 @@ var HTTPClient contextKey
 // an immutable public variable with a unique type. It's immutable
 // because nobody else can create a ContextKey, being unexported.
 type contextKey struct{}
-
 
 // Config specifies configuration options and credentials for accessing Amazon SES.
 type Config struct {
@@ -117,7 +115,7 @@ func sesGet(cx context.Context, data url.Values, endpoint, accessKeyID, secretAc
 	auth := fmt.Sprintf("AWS3-HTTPS AWSAccessKeyId=%s, Algorithm=HmacSHA256, Signature=%s", accessKeyID, signature)
 	headers["X-Amzn-Authorization"] = []string{auth}
 
-	req := http.Request{
+	req := &http.Request{
 		URL:        endpointURL,
 		Method:     "GET",
 		ProtoMajor: 1,
@@ -125,11 +123,12 @@ func sesGet(cx context.Context, data url.Values, endpoint, accessKeyID, secretAc
 		Close:      true,
 		Header:     headers,
 	}
+	req = req.WithContext(cx)
 	var hc *http.Client
 	if hc, _ = cx.Value(HTTPClient).(*http.Client); hc == nil {
-			hc = http.DefaultClient
+		hc = http.DefaultClient
 	}
-	r, err := hc.Do(&req)
+	r, err := hc.Do(req)
 	if err != nil {
 		log.Printf("http error: %s", err)
 		return "", err
@@ -155,7 +154,7 @@ func sesPost(cx context.Context, data url.Values, endpoint, accessKeyID, secretA
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
+	req = req.WithContext(cx)
 	now := time.Now().UTC()
 	// date format: "Tue, 25 May 2010 21:20:27 +0000"
 	date := now.Format("Mon, 02 Jan 2006 15:04:05 -0700")
@@ -169,7 +168,7 @@ func sesPost(cx context.Context, data url.Values, endpoint, accessKeyID, secretA
 
 	var hc *http.Client
 	if hc, _ = cx.Value(HTTPClient).(*http.Client); hc == nil {
-			hc = http.DefaultClient
+		hc = http.DefaultClient
 	}
 	r, err := hc.Do(req)
 	if err != nil {
